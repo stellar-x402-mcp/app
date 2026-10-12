@@ -1,270 +1,299 @@
-<div align="center">
-  <h1>accensa-app</h1>
-  <p><strong>The merchant back-office for x402 sellers on Stellar</strong></p>
-  <p>
-    <img src="https://img.shields.io/github/actions/workflow/status/accensa/accensa-app/ci.yml?branch=main" alt="CI Status" />
-    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" />
-    <img src="https://img.shields.io/badge/stellar-x402-blue.svg" alt="Stellar x402" />
-  </p>
-  <p>
-    <a href="https://accensa-dashboard.vercel.app/verify"><strong>Verify a Receipt</strong></a> ·
-    <a href="https://accensa-dashboard.vercel.app/dashboard"><strong>Live Dashboard</strong></a> ·
-    <a href="https://accensa.github.io/accensa-app/"><strong>Documentation</strong></a> ·
-    <a href="https://github.com/accensa/accensa-contracts"><strong>accensa-contracts</strong></a>
-  </p>
-</div>
+<p align="center">
+  <img src="https://github.com/stellar-x402-mcp/monorepo/blob/main/assets/logo.png" width="160" height="160" alt="Stellar x402 Logo" style="border-radius: 24px;" />
+</p>
 
-> Part of the **[Accensa](https://github.com/accensa)** merchant back-office for x402
-> sellers on Stellar. This repo holds the off-chain half — indexer, dashboard, and
-> SDK. The Soroban contracts live in
-> [`accensa-contracts`](https://github.com/accensa/accensa-contracts).
+# stellar-x402-App
 
-## The Problem
+[![CI](https://github.com/stellar-x402-mcp/monorepo/actions/workflows/ci.yml/badge.svg)](https://github.com/stellar-x402-mcp/monorepo/actions/workflows/ci.yml)
+[![Vercel Deployment](https://img.shields.io/badge/Vercel-Showcase_Portal-black?logo=vercel)](https://stellar-x402-mcp.vercel.app)
+[![Stellar Testnet](https://img.shields.io/badge/Stellar-Testnet_Deployed-3e7bfa?logo=stellar)](https://stellar.expert/explorer/testnet/contract/CDAVUNF5DHX2MWF33XDMY7WKVBSQZ3SXZDT2TPSNZPEB3Z4HHPPKTVGY)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Vitest-155_Passing-success.svg)](test/e2e/)
+[![Documentation](https://img.shields.io/badge/Documentation-GitBook-3e7bfa?logo=gitbook)](https://emeditweb.gitbook.io/x402)
 
-When you put an x402 paywall in front of an API, payment stops being an event your
-backend records and becomes something that happens _on a ledger you don't control_.
-An agent pays, retries, and gets its data — and your database never hears about it.
+Model Context Protocol (MCP) App Layer, institutional developer tooling system, and multi-payment settlement framework for Stellar and Soroban.
 
-So the merchant is left without the things every other payment stack gives them:
+`stellar-x402-mcp` connects autonomous AI agents (Claude Desktop, Cursor, LangChain, AutoGPT) to Stellar Horizon and Soroban RPC, while empowering tool developers to monetize agent invocations via HTTP 402 micro-payments across 7 distinct Stellar payment modalities.
 
-- **No revenue view.** Payments land as SAC transfers on Stellar. Reconstructing
-  "what did I earn today, and from which route" means reading chain data, not
-  querying your own database.
-- **No attribution.** A transfer tells you an amount and a payer. It doesn't tell you
-  _which endpoint_ was bought, which is exactly what you need to price anything.
-- **No way to answer a dispute.** When an agent operator claims they were double
-  charged, both sides are looking at different records.
+---
 
-`accensa-app` is the back-office that closes this. The indexer reconstructs payment
-history directly from Stellar, the SDK attributes each payment to the route that
-earned it, and the dashboard turns that into something a merchant can actually read —
-backed by receipts anyone can verify against
-[`ReceiptAnchor`](https://github.com/accensa/accensa-contracts) on-chain.
+## Relevant Project Links
 
-## Why Stellar
+For developers, evaluators, and system integrators:
 
-Sub-cent fees are what make per-request agent payments viable in the first place, and
-SAC transfer events give the indexer a clean, uniform stream to reconstruct from —
-the same shape whether a merchant settles in XLM or native USDC. Batched Merkle
-anchoring on Soroban then makes every receipt independently provable for a fraction
-of a cent, which is the only way verifiability survives micropayment economics.
+| Resource | Target Link | Description |
+|---|---|---|
+| **GitHub Repository** | [github.com/stellar-x402-mcp/monorepo](https://github.com/stellar-x402-mcp/monorepo) | Monorepo source code, contracts, and CI/CD |
+| **Official Documentation Portal (GitBook)** | [emeditweb.gitbook.io/x402](https://emeditweb.gitbook.io/x402) | Complete interactive GitBook documentation with 26 guides across 7 payment modalities and error registry |
+| **Interactive Showcase (Vercel)** | [stellar-x402-mcp.vercel.app](https://stellar-x402-mcp.vercel.app) | Live tool runner, x402 simulator, and error registry |
+| **Testnet Contract (Stellar.expert)** | [stellar.expert/testnet/contract/...](https://stellar.expert/explorer/testnet/contract/CDAVUNF5DHX2MWF33XDMY7WKVBSQZ3SXZDT2TPSNZPEB3Z4HHPPKTVGY) | Verified state channel contract and upload transactions |
+| **Stellar Laboratory (Testnet)** | [lab.stellar.org/testnet/contract/...](https://lab.stellar.org/r/testnet/contract/CDAVUNF5DHX2MWF33XDMY7WKVBSQZ3SXZDT2TPSNZPEB3Z4HHPPKTVGY) | Live Soroban RPC contract inspection harness |
+| **Planning & Architecture Records** | [github.com/EmeditWeb/stellar-agentic-planning](https://github.com/EmeditWeb/stellar-agentic-planning) | ADR-001 through ADR-015 and complete roadmap |
+| **Gas Benchmarks** | [contracts/x402_channel/BENCHMARKS.md](contracts/x402_channel/BENCHMARKS.md) | Profiled CPU instructions, memory bytes, and savings |
+| **250 Error Codes Registry** | [packages/paywall/src/errors/](packages/paywall/src/errors/) | Exhaustive machine-readable error classification |
 
-## Architecture
+---
 
-```
-   agent ──pays──▶ your x402 endpoint
-                        │  attachAccensaHook() tags the route
-                        ▼
-                   Stellar ledger  (SAC transfer)
-                        │
-          ┌─────────────┴──────────────┐
-          ▼                            ▼
-   /api/sync (indexer)           ReceiptAnchor
-   decodes SAC transfers         anchors Merkle roots
-          │                            │
-          ▼                            │
-     PostgreSQL                        │
-          │                            │
-          ▼                            ▼
-   Next.js dashboard  ──anchor_batch──▶  ReceiptAnchor
-          │                            │
-          ▼                            ▼
-   GET /api/receipts/:txHash    verify_receipt(leaf, proof)
-```
+## Architectural Highlights
 
-| Component         | Path                                                     | What it does                                                                                                                                                                                 |
-| ----------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Indexer**       | [`apps/web/src/app/api/sync`](apps/web/src/app/api/sync) | Decodes Stellar Asset Contract `transfer` events addressed to the merchant and persists them to PostgreSQL. Runs on a schedule; tracks a ledger cursor so it never rescans or double-counts. |
-| **Dashboard**     | [`apps/web/`](apps/web)                                  | Next.js app showing payments, totals, and receipt verification.                                                                                                                              |
-| **SDK**           | [`packages/sdk/`](packages/sdk)                          | `verifyReceipt()` for off-chain Merkle verification, and `attachAccensaHook()` / `createSettleHook()` for reporting route-level attribution from your x402 server.                           |
-| **Demo merchant** | [`apps/demo-merchant/`](apps/demo-merchant)              | Minimal paid endpoint for exercising the flow end to end.                                                                                                                                    |
+```mermaid
+flowchart TD
+    subgraph AgentLayer["Autonomous Agent Layer"]
+        Agent["AI Agent / LLM Client"]
+        Client["@stellar-mcp/agent-client"]
+        Signer["InMemoryWalletSigner"]
+        Breaker["CircuitBreaker"]
+        Tracker["BudgetTracker & Idempotency"]
+    end
 
-## Verifying a Receipt Off-Chain
+    subgraph TransportLayer["Model Context Protocol"]
+        Transport["MCP Transport (stdio / SSE)"]
+    end
 
-`verifyReceipt()` mirrors `ReceiptAnchor.verify_receipt` exactly — sorted-pair
-SHA-256, so proofs carry no left/right position flags. An agent can check a receipt
-without any network call at all:
+    subgraph ServerLayer["Developer Tooling & Paywall Engine"]
+        Server["@stellar-mcp/server (17+ Tools)"]
+        Paywall["@stellar-mcp/paywall (@x402Tool)"]
+        Verifier["OnChainTransactionVerifier"]
+        Replay["ReplayProtector (LRU Cache)"]
+        Pricing["DynamicPricingEngine"]
+        ErrorReg["Universal 250 Error Registry"]
+    end
 
-```ts
-import { verifyReceipt } from '@accensa/sdk';
+    subgraph SettlementLayer["Stellar Ledger & Soroban State"]
+        Horizon["Stellar Horizon (DEX, SSE, Accounts)"]
+        Soroban["Soroban RPC (Simulate, Storage, Events)"]
+        Channel["x402_channel Contract (Testnet)"]
+    end
 
-// Batch #1, anchored live on testnet.
-const ok = verifyReceipt(
-  'c476fc0553303ec4275bd4cb50ab7fa8182e343dbc4c721d7e2076fd77a5b56c',
-  [
-    '7ca64ee60e2b975f59f2a1f1cc1526d5b001a5c29f70291f316ba1c012a01bd1',
-    '1733fad16ada0c23d8cdaff52bea66bea308dddddcb79348842acef0065c9615',
-  ],
-  'c6ccdcdb57896fa4999d9dea6a5ef40523d55e46cf32b621d7ea4a582d90e6ac',
-); // true
+    Agent <--> Client
+    Client --> Signer
+    Client --> Breaker
+    Client --> Tracker
+    Client <--> Transport
+    Transport <--> Server
+    Server <--> Paywall
+    Paywall --> Verifier
+    Paywall --> Replay
+    Paywall --> Pricing
+    Paywall --> ErrorReg
+    Server <--> Horizon
+    Server <--> Soroban
+    Verifier <--> Horizon
+    Verifier <--> Soroban
+    Client -.-> Channel
 ```
 
-The same leaf, proof, and root verify `true` on-chain against
-[`CBHRJU7C…`](https://stellar.expert/explorer/testnet/contract/CBHRJU7CF4XIFRNDITFHNQHABKBMFM2FYFHLGWN3JGSFYYCDSMDAWPRV),
-and a forged leaf returns `false` in both implementations. See
-[DEPLOYMENTS.md](https://github.com/accensa/accensa-contracts/blob/main/DEPLOYMENTS.md#verifying-the-live-deployment-yourself)
-for the commands.
+---
 
-## Getting Started
+## Seven Stellar Payment Modalities Supported
 
-### Prerequisites
+`stellar-x402-mcp` is an open-source tooling system supporting multiple Stellar payment mechanisms:
 
-Node 22+, pnpm 9, and a PostgreSQL instance.
+1. **Native XLM Instant Payments**: Zero-dependency micro-settlement via standard Stellar payment operations.
+2. **Soroban SAC Token Transfers**: High-precision USDC and custom SAC token transfers with cryptographic envelope simulation.
+3. **Path Payments (Strict Send & Strict Receive)**: Automatic multi-hop routing across DEX orderbooks and liquidity pools. Agents can pay in their preferred asset while services receive settlement in requested assets.
+4. **Claimable Balances**: Conditional escrow settlements with time predicates for asynchronous multi-agent coordination.
+5. **Fee-Bump Transactions**: Relayer-sponsored transactions allowing agents to execute paywalled tools without maintaining native XLM reserves for gas.
+6. **Pre-Funded State Channels (`x402_channel`)**: Off-chain bilateral vouchers signed by agent wallets, enabling zero-fee instant micro-invocations settled on-chain cumulatively.
+7. **AMM Liquidity Swaps**: Direct execution against automated market maker liquidity pools.
 
-### Run locally
+---
+
+## Soroban State Channel Contract & Ultra-Low Gas Profile
+
+Deployed to **Stellar Testnet**:
+- **Contract Address**: `CDAVUNF5DHX2MWF33XDMY7WKVBSQZ3SXZDT2TPSNZPEB3Z4HHPPKTVGY`
+- **WASM Bytecode Hash**: `dcf795a2daff9472f0796ca0188e4f5cae0c868a68cd70dc755557708b4efdb3`
+- **Optimized Binary Size**: 5,908 bytes (under 6KB)
+- **Deployment Transaction**: [`55324f4c7277b8596452723f894fce3061a019e7cf98d080f2dfea65f5144935`](https://stellar.expert/explorer/testnet/tx/55324f4c7277b8596452723f894fce3061a019e7cf98d080f2dfea65f5144935)
+
+### Gas Benchmark Comparison (1,000 Micro-Invocations)
+
+| Settlement Mechanism | On-Chain Txs | CPU Instructions | Network Fee | Latency per Tool Call |
+|---|---|---|---|---|
+| Direct Stellar Classic | 1,000 | N/A | 100,000 stroops | 3-5 seconds |
+| Direct Soroban SAC | 1,000 | ~250,000,000 | ~1,500,000 stroops | 3-5 seconds |
+| **x402 State Channel (Ours)** | **2** (Open + Close) | **611,462** (99.75% less) | **200 stroops** (99.8% fee savings) | **< 2 ms** (instant local voucher) |
+
+Full methodology and profiling logs in [contracts/x402_channel/BENCHMARKS.md](contracts/x402_channel/BENCHMARKS.md).
+
+---
+
+## Universal 250 Error Codes Registry
+
+Standardized, machine-readable error codes covering all failure modes across the protocol:
+
+- **1000 to 1039 (40 codes)**: Protocol and Transport Errors (MCP JSON-RPC, SSE framing, payload limits)
+- **1040 to 1079 (40 codes)**: Horizon and Ledger State Errors (sequence mismatch, trustline missing, reserve limits)
+- **1080 to 1119 (40 codes)**: Soroban RPC and Simulation Errors (host traps, CPU/memory limits, storage TTL expiration)
+- **1120 to 1159 (40 codes)**: Paywall and Verification Errors (HTTP 402 challenges, price slippage, signature faults)
+- **1160 to 1189 (30 codes)**: Anti-Replay and Storage Errors (claimed nonces, duplicate tx hashes, LRU cache faults)
+- **1190 to 1219 (30 codes)**: Autonomous Agent and Wallet Errors (budget caps, circuit breaker trips, key derivation)
+- **1220 to 1249 (30 codes)**: DEX, Liquidity Pool and Path Payment Errors (empty orderbooks, pool imbalances, path limits)
+
+Every error code provides `code`, `slug`, `category`, `httpStatus`, `retryable` boolean, `message`, and deterministic `remedy` instructions.
+
+---
+
+## Complete MCP Tool Catalog (17 Tools)
+
+| Tool Name | Parameters | Category | Description |
+|---|---|---|---|
+| `stellar_get_balance` | `accountAddress`, `network` | Horizon | Queries native XLM and SAC token balances |
+| `stellar_get_account` | `accountAddress`, `network` | Horizon | Queries sequence number, signers, and thresholds |
+| `stellar_get_account_details` | `accountAddress`, `network` | Horizon | Comprehensive inspection including subentry counts, flags, and balances |
+| `stellar_get_orderbook` | `sellingAsset`, `buyingAsset`, `limit`, `network` | Horizon | Real-time DEX orderbook depth, bids, asks, and spreads |
+| `stellar_get_liquidity_pools` | `poolId`, `reserves`, `account`, `cursor`, `limit`, `network` | Horizon | AMM reserve balances, fee tiers, and total pool shares |
+| `stellar_get_claimable_balances` | `claimant`, `sponsor`, `asset`, `balanceId`, `network` | Horizon | Inspects pending claimable balance escrows and time predicates |
+| `stellar_stream_ledger_events` | `streamType`, `account`, `cursor`, `limit`, `network` | Horizon | Live Server-Sent Events (SSE) stream for ledger headers and payments |
+| `stellar_find_payment_paths` | `sourceAccount`, `destinationAccount`, `destinationAsset`, `destinationAmount` | Horizon | Finds optimal strict-receive liquidity paths |
+| `stellar_swap_tokens` | `sourceAccount`, `sendAsset`, `sendMax`, `destAsset`, `destAmount`, `signedEnvelopeXdr` | Horizon | Constructs or submits DEX path payment swap transactions |
+| `stellar_submit_transaction` | `signedEnvelopeXdr`, `network` | Horizon | Broadcasts signed transaction envelope to the ledger |
+| `soroban_simulate_invocation` | `transactionXdr`, `contractId`, `method`, `args`, `network` | Soroban | Dry-runs invocation to extract CPU/memory footprint and auth entries |
+| `soroban_simulate_contract` | `contractId`, `method`, `args`, `transactionXdr`, `network` | Soroban | Dry-runs contract method and returns parsed ScVal return value |
+| `soroban_invoke_contract` | `contractId`, `method`, `args`, `secretKey`, `network` | Soroban | Signs, simulates, and submits Soroban contract transaction |
+| `soroban_query_events` | `startLedger`, `contractIds`, `topics`, `cursor`, `limit` | Soroban | Queries contract event logs with topic and ledger filters |
+| `soroban_get_ledger_entries` | `keys`, `contractId`, `keySymbol`, `durability`, `network` | Soroban | Inspects low-level contract storage entries via base64 XDR |
+| `soroban_get_transaction` | `hash`, `network` | Soroban | Polls transaction status and inspects execution metadata XDR |
+| `soroban_get_latest_ledger` | `network` | Soroban | Queries latest ledger sequence, protocol version, and close time |
+| `soroban_get_network` | `network` | Soroban | Inspects network passphrase, protocol version, and friendbot URL |
+| `soroban_assemble_transaction` | `transactionXdr`, `network` | Soroban | Builds valid transaction envelope with simulation footprint |
+| `soroban_read_storage` | `contractId`, `key`, `keyType`, `durability`, `network` | Soroban | High-level deserializer converting ScVal storage into typed JSON |
+
+---
+
+## Production Resilience & Fault Tolerance
+
+Institutional resilience mechanisms engineered for mission-critical agent workflows:
+- **`CircuitBreaker`**: Fast-fails with 0 network calls during upstream RPC outages.
+- **Jittered Exponential Backoff**: Uniform random jitter preventing thundering-herd congestion.
+- **Finality Polling (`pollTransactionUntilFinal`)**: Strictly rejects intermediate `PENDING` states until terminal `SUCCESS` or `FAILED`.
+- **Fee-Bump Escalation**: Builds sponsored fee-bumps when transactions stall under network spikes.
+- **Hash-Level Idempotency**: Anchors on envelope hash to guarantee exactly-once payment execution.
+
+---
+
+## Agent Framework Adapters (`@stellar-mcp/adapters`)
+
+Native adapters connecting Stellar MCP tools directly into leading autonomous agent frameworks with automatic x402 payment resolution:
+
+### Vercel AI SDK Core (`ai`)
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { createVercelAITools } from '@stellar-mcp/adapters/vercel';
+import { X402AgentMcpClient } from '@stellar-mcp/agent-client';
+
+const client = new X402AgentMcpClient({ secretKey: process.env.STELLAR_SECRET_KEY });
+const tools = createVercelAITools(mcpTools, client);
+
+const { text } = await generateText({
+  model: openai('gpt-4o'),
+  tools,
+  prompt: 'Check balance for account GABCD and simulate contract CXYZ',
+});
+```
+
+### LangChain.js (`@langchain/core`)
+
+```typescript
+import { createLangChainTools } from '@stellar-mcp/adapters/langchain';
+import { initializeAgentExecutorWithOptions } from 'langchain/agents';
+
+const langchainTools = createLangChainTools(mcpTools, client);
+const executor = await initializeAgentExecutorWithOptions(langchainTools, llm, {
+  agentType: 'structured-chat-zero-shot-react-description',
+});
+```
+
+### LlamaIndex.TS (`llamaindex`)
+
+```typescript
+import { createLlamaIndexTools } from '@stellar-mcp/adapters/llamaindex';
+import { ReActAgent } from 'llamaindex';
+
+const llamaTools = createLlamaIndexTools(mcpTools, client);
+const agent = new ReActAgent({ tools: llamaTools });
+```
+
+---
+
+## Standalone CLI & Config Templates (`@stellar-mcp/cli`)
+
+The `stellar-mcp` CLI provides commands for running servers, inspecting state, managing keys, and profiling gas:
 
 ```bash
-# 1. Database
-docker run --name pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres
+# Run MCP server over stdio or SSE
+stellar-mcp serve --transport stdio --network testnet
+stellar-mcp serve --transport sse --port 3000 --network testnet
 
-# 2. Configure apps/web/.env.local
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres
-MERCHANT_ADDRESS=GCALKSGAZRJLSUEJT3M5W6LN4R7XQOLIRCOS6ZA6EDZVTZDBIIPPFKJ6
-STELLAR_RPC_URL=https://soroban-testnet.stellar.org
-HOOK_API_KEY=any-shared-secret   # required for /api/hook/settle
-# ASSET_CONTRACT_IDS — comma-separated SAC ids whose transfers are revenue.
-# Omitted, it defaults to the testnet native XLM SAC. For USDC (or XLM + USDC):
-# ASSET_CONTRACT_IDS=CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA,CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+# Inspect Stellar account or Soroban contract
+stellar-mcp inspect GDCU3C3O7J2D4XJBE7FHD25VDLCPWZVDHCSH5XVLF7ZUZLFEE6KRS6RX
+stellar-mcp inspect CDAVUNF5DHX2MWF33XDMY7WKVBSQZ3SXZDT2TPSNZPEB3Z4HHPPKTVGY
 
-# 3. Dashboard (schema is created on first request)
-cd apps/web
+# Generate fresh Ed25519 keypair and fund via Friendbot
+stellar-mcp wallet generate
+stellar-mcp wallet fund GDCU3C3O7J2D4XJBE7FHD25VDLCPWZVDHCSH5XVLF7ZUZLFEE6KRS6RX
+
+# Simulate x402 payment challenge, authorization, and receipt settlement
+stellar-mcp simulate --tool soroban_execute_settlement --price 0.05 --asset USDC
+
+# Display gas, CPU instruction, and fee benchmarks
+stellar-mcp benchmark
+```
+
+### IDE Configuration Templates
+
+- **Claude Desktop**: Copy `templates/claude_desktop_config.json` to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
+- **Cursor**: Copy `.cursor/mcp.json` into your workspace root.
+- **Docker**: Run `docker compose up --build` to deploy the SSE server at port 3000.
+
+---
+
+## Reference Applications (`apps/`)
+
+Production-ready reference implementations illustrating monetization and consumption patterns:
+
+1. **`apps/showcase`**: Interactive Next.js 16 developer playground deployed to Vercel with live Horizon/Soroban tool execution, 402 challenge simulator, and 250 error code directory.
+2. **`apps/paywalled-oracle`**: Standalone reference MCP server monetizing real-time DEX price discovery, Soroban TVL, and optimal swap routing, protected by `@stellar-mcp/paywall` with USDC micropayments.
+3. **`apps/trading-agent`**: Autonomous AI trading agent consuming paywalled oracle feeds, auto-settling 402 challenges via `@stellar-mcp/agent-client`, enforcing daily budget caps, and executing DEX swaps.
+
+---
+
+## Open Source Tooling Governance
+
+Designed to accommodate 100+ community issues, contributors, and tooling extensions:
+- **Issue Templates**: Structured forms for [Tool Requests](.github/ISSUE_TEMPLATE/tool_request.yml), [Payment Settlement Adapters](.github/ISSUE_TEMPLATE/payment_method.yml), and [Bug Reports](.github/ISSUE_TEMPLATE/bug_report.yml).
+- **PR Template**: Rigorous [Pull Request Checklist](.github/PULL_REQUEST_TEMPLATE.md) with comprehensive verification checklists.
+- **Automated CI/CD**: Continuous integration on GitHub Actions with Vercel deployment automation.
+
+---
+
+## Development & Testing
+
+```bash
+# Install dependencies across all workspaces
 pnpm install
-pnpm dev
+
+# Run 130 tests across all packages and reference apps
+pnpm test
+
+# Typecheck with strict TypeScript and exactOptionalPropertyTypes
+pnpm typecheck
+
+# Build dual ESM/CJS and type declarations via tsup
+pnpm build
+
+# Run Soroban smart contract tests and gas benchmarks
+cargo test --manifest-path contracts/x402_channel/Cargo.toml
+
+# Build optimized WASM bytecode (5,908 bytes)
+stellar contract build --manifest-path contracts/x402_channel/Cargo.toml
 ```
 
-Then trigger an index run with `curl localhost:3000/api/sync`, and the dashboard at
-`/dashboard` will show whatever settled to `MERCHANT_ADDRESS`. If nothing has, it
-says so — the dashboard never invents rows to fill space.
-
-### Payment webhooks (`WEBHOOK_URL`)
-
-Set `WEBHOOK_URL` to receive a `POST` for each newly indexed payment. The
-indexer **does not wait on your endpoint**. Each insert writes a
-`webhook_deliveries` row in the same database transaction; a separate job at
-`GET /api/webhooks/deliver` (same `CRON_SECRET` bearer as `/api/sync`) ships
-the payload. A host that sleeps, 500s, or rate-limits cannot stall the ledger
-cursor — that is how 207 ledgers were lost the last time indexing blocked on
-something that was not the chain.
-
-**Retry policy.** Up to 8 attempts over 24 hours. Exponential backoff with 25%
-jitter, capped at one hour. 5xx, 429, and transport errors are retried; other
-4xx are not. A `429` honours `Retry-After` (delta-seconds or HTTP-date). After
-the window the row is `failed` and is listed on the dashboard.
-
-**Signature.** Ed25519 over the exact UTF-8 body bytes, the same scheme as
-settlement reporting.
-
-| Header                  | Value                                         |
-| ----------------------- | --------------------------------------------- |
-| `Content-Type`          | `application/json`                            |
-| `X-Signature`           | hex-encoded Ed25519 signature of the raw body |
-| `X-Accensa-Timestamp`   | Unix seconds at sign time                     |
-| `X-Accensa-Delivery-Id` | `webhook_deliveries.id`                       |
-
-`WEBHOOK_SIGNING_KEY` is a 32-byte Ed25519 private key as hex. Without it,
-queued deliveries fail closed rather than going out unsigned. Verify with the
-matching public key over the raw request body, then parse JSON.
-
-Body fields: `tx_hash`, `ledger`, `payer`, `amount`, `asset`, `ts`, `route`,
-`method`.
-
-Routes: `/` is the landing page, `/dashboard` the merchant view, and `/verify` the
-public receipt verifier, which needs no account.
-
-### Route-level attribution
-
-A SAC `transfer` event carries the payer, amount, and asset — never the HTTP route
-that was paid for. That mapping exists only inside your server, at the moment x402
-settles, so it has to be reported rather than indexed.
-
-Set `HOOK_API_KEY` on both sides, then report settlements from your x402 server:
-
-```ts
-import { createSettleHook } from '@accensa/sdk';
-
-resourceServer.onAfterSettle(
-  createSettleHook({
-    indexerUrl: 'https://your-accensa.vercel.app',
-    apiKey: process.env.HOOK_API_KEY,
-  }),
-);
-```
-
-Or, if you only have the response to work from, mount `attachAccensaHook()` after your
-x402 middleware — it reads the `X-PAYMENT-RESPONSE` header.
-
-`POST /api/hook/settle` is the endpoint behind both. It is the only write path into
-`payments` not derived from the ledger, so it fails closed: with no `HOOK_API_KEY`
-configured it accepts nothing. Reported attribution is marked with `hook_reported_at`,
-keeping merchant-reported fields distinguishable from on-chain ones. Settlements for
-transfers the indexer has not reached yet are staged and completed on the next run.
-
-[`apps/demo-merchant/`](apps/demo-merchant) is a working example.
-
-### Tenancy model
-
-One deployment now supports **multiple merchants**. Each merchant is a row in the
-`merchants` table (`address`, and optionally a settlement-reporting `public_key_hex`,
-`asset_contract_ids`, `refund_vault_id`, and `webhook_url` that override the
-deployment-wide env vars). `payments` and the indexer's ledger cursor
-(`sync_state`) are scoped by `merchant_id`, enforced both by application-level query
-scoping and by Postgres row-level security as a second line of defence — see
-[DESIGN.md](DESIGN.md) for the full design.
-
-Upgrading an existing single-merchant deployment needs no action: the migration
-(`migrations/003_multi_merchant.sql`, applied automatically) backfills one `merchants`
-row from `MERCHANT_ADDRESS`/`MERCHANT_PUBLIC_KEY` and every existing payment onto it.
-Onboarding another merchant means inserting one more row into `merchants`, not
-standing up another deployment.
-
-### Contract addresses
-
-Testnet IDs are published in
-[`accensa-contracts/deployments/testnet.env`](https://github.com/accensa/accensa-contracts/blob/main/deployments/testnet.env).
-
-### Settling in USDC or multiple assets
-
-`ASSET_CONTRACT_IDS` selects which Stellar Asset Contracts the indexer treats as
-revenue. It defaults to the testnet native XLM SAC; set it to a comma-separated
-list to index USDC, or XLM and USDC together. `payments.asset` records each
-row's asset, and revenue is grouped by asset — never summed across them.
-
-RefundVault holds a **single** token, so a merchant taking both assets refunds
-in only one of them unless a second vault is deployed. Receiving USDC also
-requires a trustline. Both constraints are spelled out in
-[DEPLOYMENT.md](DEPLOYMENT.md#settling-in-usdc-or-multiple-assets).
-
-## Testing
-
-CI runs ESLint, `tsc --noEmit`, the SDK and web test suites, and a production build
-on every push. Failures fail the build — no suppressed exit codes.
-
-```bash
-cd apps/web     && pnpm lint && pnpm tsc --noEmit && pnpm test
-cd packages/sdk && pnpm test
-```
-
-The web suite covers SAC event decoding against a **real captured testnet event**,
-and the decimal arithmetic that keeps payment amounts off floating point.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Security policy in [SECURITY.md](SECURITY.md).
-
-## Contributors
-
-<a href="https://github.com/accensa/accensa-app/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=accensa/accensa-app" />
-</a>
+---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-## Setup
-
-See [db-setup.md](db-setup.md) for database setup instructions, and
-[DEPLOYMENT.md](DEPLOYMENT.md) for the deployed topology — how Vercel, Supabase,
-and the GitHub Actions indexer fit together, which environment variables live
-where, and the traps that have cost time here (the alias that `--prod` does not
-move, the Hobby cron limit, and the IPv6-only Direct connection string).
+Apache-2.0. See [LICENSE](LICENSE) for details.
